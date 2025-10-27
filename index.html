@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leitner 闪卡系统</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --card-bg: #ffffff;
+      --text: #1f2933;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --muted: #6b7280;
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(160deg, #e0e7ff, #fef3c7);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .app {
+      background-color: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(16px);
+      border-radius: 24px;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+      max-width: 720px;
+      width: 100%;
+      padding: 2.5rem 2rem 3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 2.4vw, 2.4rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .controls input[type="file"] {
+      padding: 0.5rem;
+      border-radius: 12px;
+      border: 1px dashed rgba(37, 99, 235, 0.4);
+      background-color: rgba(37, 99, 235, 0.08);
+    }
+
+    .status {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .card-wrapper {
+      perspective: 1600px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .flashcard {
+      width: min(100%, 480px);
+      height: 280px;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+      cursor: pointer;
+    }
+
+    .flashcard-inner {
+      position: absolute;
+      inset: 0;
+      border-radius: 20px;
+      box-shadow: 0 24px 40px rgba(37, 99, 235, 0.15);
+      background: linear-gradient(150deg, #ffffff, #e0e7ff);
+      padding: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backface-visibility: hidden;
+      text-align: center;
+      font-size: 1.3rem;
+      line-height: 1.6;
+    }
+
+    .flashcard .back {
+      transform: rotateY(180deg);
+      background: linear-gradient(150deg, #ffffff, #dbeafe);
+    }
+
+    .flashcard.flipped {
+      transform: rotateY(180deg);
+    }
+
+    .card-actions {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      padding: 0.75rem 1.75rem;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 12px 24px rgba(37, 99, 235, 0.35);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(31, 41, 55, 0.06);
+      color: var(--text);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(37, 99, 235, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .message {
+      text-align: center;
+      font-size: 1.05rem;
+      color: var(--muted);
+      min-height: 1.5em;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 1.25rem 0.75rem;
+      }
+
+      .app {
+        padding: 1.75rem 1.25rem 2.5rem;
+      }
+
+      .flashcard {
+        height: 240px;
+      }
+
+      .flashcard-inner {
+        font-size: 1.1rem;
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Leitner 闪卡复习系统</h1>
+      <p>上传 TSV 闪卡数据，按间隔重复策略高效复习记忆内容。</p>
+    </header>
+
+    <div class="controls">
+      <label for="tsvInput">导入 TSV 文件：</label>
+      <input type="file" id="tsvInput" accept=".tsv" />
+    </div>
+
+    <div class="status">
+      <span>今日待复习：<strong id="reviewCount">0</strong> 张</span>
+      <span id="currentBox">当前卡片盒：-</span>
+    </div>
+
+    <div class="card-wrapper">
+      <div class="flashcard" id="flashcard">
+        <div class="flashcard-inner front" id="cardFront">请先导入闪卡数据</div>
+        <div class="flashcard-inner back" id="cardBack">答案将在这里显示</div>
+      </div>
+    </div>
+
+    <div class="card-actions">
+      <button class="btn-secondary" id="flipBtn" disabled>翻转卡片</button>
+      <button class="btn-secondary" id="redoBtn" disabled>🙅‍♂️ 不认识</button>
+      <button class="btn-primary" id="goodBtn" disabled>💡 认识</button>
+    </div>
+
+    <div class="message" id="message"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'leitnerFlashcards';
+    const DAY = 24 * 60 * 60 * 1000;
+
+    const tsvInput = document.getElementById('tsvInput');
+    const flashcard = document.getElementById('flashcard');
+    const cardFront = document.getElementById('cardFront');
+    const cardBack = document.getElementById('cardBack');
+    const flipBtn = document.getElementById('flipBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    const goodBtn = document.getElementById('goodBtn');
+    const reviewCountEl = document.getElementById('reviewCount');
+    const messageEl = document.getElementById('message');
+    const currentBoxEl = document.getElementById('currentBox');
+
+    let cards = [];
+    let reviewQueue = [];
+    let currentCard = null;
+    let showingAnswer = false;
+    let initialReviewCount = 0;
+
+    function saveCards() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    }
+
+    function loadCards() {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) return [];
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          return parsed.map((card, index) => ({
+            id: card.id ?? index,
+            question: card.question ?? '',
+            answer: card.answer ?? '',
+            box: card.box ?? 1,
+            reviewTimestamp: card.reviewTimestamp ?? Date.now()
+          }));
+        }
+      } catch (err) {
+        console.error('读取本地数据失败', err);
+      }
+      return [];
+    }
+
+    function parseTSV(text) {
+      return text
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map((line, index) => {
+          const [question = '', answer = ''] = line.split('\t');
+          return {
+            id: index,
+            question: question.trim(),
+            answer: answer.trim(),
+            box: 1,
+            reviewTimestamp: Date.now()
+          };
+        });
+    }
+
+    function setReviewQueue() {
+      reviewQueue = getTodayReviewCards();
+      initialReviewCount = reviewQueue.length;
+      shuffle(reviewQueue);
+      updateReviewCount();
+    }
+
+    function getTodayReviewCards() {
+      const now = Date.now();
+      return cards.filter(card => card.reviewTimestamp <= now);
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    function showMessage(text = '') {
+      messageEl.textContent = text;
+    }
+
+    function updateReviewCount() {
+      reviewCountEl.textContent = reviewQueue.length;
+    }
+
+    function updateCurrentBox() {
+      currentBoxEl.textContent = currentCard ? `当前卡片盒：Box ${currentCard.box}` : '当前卡片盒：-';
+    }
+
+    function renderPlaceholder(frontText, backText) {
+      cardFront.textContent = frontText;
+      cardBack.textContent = backText;
+      flashcard.classList.remove('flipped');
+      showingAnswer = false;
+      flipBtn.disabled = redoBtn.disabled = goodBtn.disabled = true;
+      updateCurrentBox();
+    }
+
+    function renderCard(card) {
+      if (!card) {
+        renderPlaceholder('请先导入闪卡数据', '答案将在这里显示');
+        return;
+      }
+      cardFront.textContent = card.question || '(无问题内容)';
+      cardBack.textContent = card.answer || '(无答案内容)';
+      showingAnswer = false;
+      flashcard.classList.remove('flipped');
+      flipBtn.disabled = redoBtn.disabled = goodBtn.disabled = false;
+      updateCurrentBox();
+    }
+
+    function drawNextCard() {
+      resetFlipButton();
+      if (reviewQueue.length === 0) {
+        currentCard = null;
+        if (cards.length === 0) {
+          renderPlaceholder('请先导入闪卡数据', '答案将在这里显示');
+          showMessage('请先导入闪卡数据。');
+        } else {
+          renderPlaceholder('今日暂无待复习卡片', '休息一下吧～');
+          const message = initialReviewCount > 0
+            ? '恭喜！今日复习已完成！'
+            : '今日暂无待复习卡片，休息一下吧！';
+          showMessage(message);
+        }
+        updateReviewCount();
+        return;
+      }
+      currentCard = reviewQueue.shift();
+      renderCard(currentCard);
+      showMessage('');
+      updateReviewCount();
+    }
+
+    function updateCard(card) {
+      const index = cards.findIndex(c => c.id === card.id);
+      if (index !== -1) {
+        cards[index] = { ...card };
+        saveCards();
+      }
+    }
+
+    function handleRedo() {
+      if (!currentCard) return;
+      currentCard.box = 1;
+      currentCard.reviewTimestamp = Date.now();
+      updateCard(currentCard);
+      reviewQueue.push({ ...currentCard });
+      drawNextCard();
+    }
+
+    function handleGood() {
+      if (!currentCard) return;
+      const now = Date.now();
+      if (currentCard.box === 1) {
+        currentCard.box = 2;
+        currentCard.reviewTimestamp = now + 3 * DAY;
+      } else if (currentCard.box === 2) {
+        currentCard.box = 3;
+        currentCard.reviewTimestamp = now + 7 * DAY;
+      } else {
+        currentCard.box = 3;
+        currentCard.reviewTimestamp = now + 7 * DAY;
+      }
+      updateCard(currentCard);
+      drawNextCard();
+    }
+
+    function handleFlip() {
+      if (!currentCard) return;
+      showingAnswer = !showingAnswer;
+      flashcard.classList.toggle('flipped', showingAnswer);
+      flipBtn.textContent = showingAnswer ? '查看问题' : '翻转卡片';
+    }
+
+    function resetFlipButton() {
+      flipBtn.textContent = '翻转卡片';
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target?.result;
+        if (typeof text !== 'string') {
+          showMessage('无法读取文件内容，请重试。');
+          return;
+        }
+        const parsedCards = parseTSV(text);
+        if (parsedCards.length === 0) {
+          showMessage('未从文件中解析到有效数据。');
+          return;
+        }
+        cards = parsedCards;
+        saveCards();
+        setReviewQueue();
+        resetFlipButton();
+        drawNextCard();
+      };
+      reader.onerror = () => showMessage('读取文件时发生错误，请重试。');
+      reader.readAsText(file, 'utf-8');
+    }
+
+    function init() {
+      cards = loadCards();
+      if (cards.length > 0) {
+        setReviewQueue();
+        drawNextCard();
+      } else {
+        renderPlaceholder('请先导入闪卡数据', '答案将在这里显示');
+        showMessage('请先导入闪卡数据。');
+        resetFlipButton();
+      }
+    }
+
+    tsvInput.addEventListener('change', handleFileUpload);
+    flipBtn.addEventListener('click', handleFlip);
+    flashcard.addEventListener('click', handleFlip);
+    redoBtn.addEventListener('click', handleRedo);
+    goodBtn.addEventListener('click', handleGood);
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
